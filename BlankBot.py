@@ -310,8 +310,7 @@ class BlankBot(sc2.BotAI):
 				self.train_data.append([y, self.flipped])
 
 
-for i in range(100):
-	run_game(maps.get("(2)CatalystLE"), [
-		Bot(Race.Protoss, BlankBot(use_model=False)),
-		Computer(Race.Protoss, Difficulty.Medium),
-		], realtime=False)
+run_game(maps.get("CatalystLE"), [
+	Bot(Race.Protoss, BlankBot(use_model=False)),
+	Computer(Race.Protoss, Difficulty.Medium),
+	], realtime=False)
