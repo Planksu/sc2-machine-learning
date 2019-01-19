@@ -11,6 +11,7 @@ import numpy as np
 import math
 import keras
 
+
 os.environ["SC2PATH"] = '/home/antton/Documents/SC2/StarCraftII'
 HEADLESS = False
 
