@@ -10,10 +10,11 @@ import time
 import numpy as np
 import math
 import keras
+from keras import backend as K
 
 
 os.environ["SC2PATH"] = '/home/antton/Documents/SC2/StarCraftII'
-HEADLESS = False
+HEADLESS = True
 
 class BlankBot(sc2.BotAI):
 	def __init__(self, use_model=False):
@@ -30,14 +31,15 @@ class BlankBot(sc2.BotAI):
 		print('--- on_end called ---')
 		print(game_result, self.use_model)
 
-		with open("gameout-random-vs-medium.txt","a") as f:
+		with open("gameout-model-vs-medium.txt","a") as f:
 			if self.use_model:
 				f.write("Model {}\n".format(game_result))
 			else:
 				f.write("Random {}\n".format(game_result))
+		#clear keras session from memory
+		K.clear_session()
 
 	async def on_step(self, iteration):
-		print('Time:',self.time)
 		await self.scout()
 		await self.distribute_workers()
 		await self.build_workers()
@@ -148,15 +150,25 @@ class BlankBot(sc2.BotAI):
 		if vespene_ratio > 1.0:
 			vespene_ratio = 1.0
 
-		population_ratio = self.supply_left / self.supply_cap
+		if(self.supply_cap <= 0.0):
+			population_ratio = self.supply_left / 0.0001
+		else:
+			population_ratio = self.supply_left / self.supply_cap
+
 		if population_ratio > 1.0:
 			population_ratio = 1.0
 
 		plausible_supply = self.supply_cap / 200.0
 
-		military_weight = len(self.units(VOIDRAY)) / (self.supply_cap-self.supply_left)
+		if(self.supply_cap-self.supply_left <= 0):
+			military_weight = len(self.units(VOIDRAY)) / 0.0001
+		else:
+			military_weight = len(self.units(VOIDRAY)) / (self.supply_cap-self.supply_left)
+
 		if military_weight > 1.0:
 			military_weight = 1.0
+		elif military_weight <= 0.0:
+			military_weight = 0.0001
 
 		cv2.line(game_data, (0, 19), (int(line_max*military_weight), 19), (250, 250, 200), 3)  # worker/supply ratio
 		cv2.line(game_data, (0, 15), (int(line_max*plausible_supply), 15), (220, 200, 200), 3)  # plausible supply (supply/200.0)
@@ -285,8 +297,8 @@ class BlankBot(sc2.BotAI):
 				y[choice] = 1
 				self.train_data.append([y, self.flipped])
 
-
-run_game(maps.get("AbyssalReefLE"), [
-	Bot(Race.Protoss, BlankBot(use_model=True)),
-	Computer(Race.Protoss, Difficulty.Easy),
-	], realtime=False)
+for i in range(17):
+	run_game(maps.get("AbyssalReefLE"), [
+		Bot(Race.Protoss, BlankBot(use_model=True)),
+		Computer(Race.Protoss, Difficulty.Medium),
+		], realtime=False)
