@@ -9,16 +9,13 @@ import os
 import time
 import numpy as np
 import math
+import keras
 
-#import keras
-
-os.environ["SC2PATH"] = 'D:\Blizzard Games\StarCraft II/'
+os.environ["SC2PATH"] = '/home/antton/Documents/SC2/StarCraftII'
 HEADLESS = False
 
 class BlankBot(sc2.BotAI):
 	def __init__(self, use_model=False):
-		#self.ITERATIONS_PER_MINUTE = 165
-
 		self.MAX_WORKERS = 50
 		self.do_something_after = 0
 		self.use_model = use_model
@@ -39,11 +36,7 @@ class BlankBot(sc2.BotAI):
 				f.write("Random {}\n".format(game_result))
 
 	async def on_step(self, iteration):
-		#self.iteration = iteration
-		################
-		self.time = (self.state.game_loop/22.4) / 60
 		print('Time:',self.time)
-		###############
 		await self.scout()
 		await self.distribute_workers()
 		await self.build_workers()
@@ -81,10 +74,6 @@ class BlankBot(sc2.BotAI):
 		return go_to
 
 	async def scout(self):
-		'''
-		['__call__', '__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_game_data', '_proto', '_type_data', 'add_on_tag', 'alliance', 'assigned_harvesters', 'attack', 'build', 'build_progress', 'cloak', 'detect_range', 'distance_to', 'energy', 'facing', 'gather', 'has_add_on', 'has_buff', 'health', 'health_max', 'hold_position', 'ideal_harvesters', 'is_blip', 'is_burrowed', 'is_enemy', 'is_flying', 'is_idle', 'is_mine', 'is_mineral_field', 'is_powered', 'is_ready', 'is_selected', 'is_snapshot', 'is_structure', 'is_vespene_geyser', 'is_visible', 'mineral_contents', 'move', 'name', 'noqueue', 'orders', 'owner_id', 'position', 'radar_range', 'radius', 'return_resource', 'shield', 'shield_max', 'stop', 'tag', 'train', 'type_id', 'vespene_contents', 'warp_in']
-		'''
-
 		if len(self.units(OBSERVER)) > 0:
 			scout = self.units(OBSERVER)[0]
 			if scout.is_idle:
@@ -99,15 +88,8 @@ class BlankBot(sc2.BotAI):
 					await self.do(rf.train(OBSERVER))
 
 	async def intel(self):
-
-		# for game_info: https://github.com/Dentosal/python-sc2/blob/master/sc2/game_info.py#L162
-		#print(self.game_info.map_size)
-		# flip around. It's y, x when you're dealing with an array.
 		game_data = np.zeros((self.game_info.map_size[1], self.game_info.map_size[0], 3), np.uint8)
 
-		# UNIT: [SIZE, (BGR COLOR)]
-		'''from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, GATEWAY, \
- CYBERNETICSCORE, STARGATE, VOIDRAY'''
 		draw_dict = {
 					 NEXUS: [15, (0, 255, 0)],
 					 PYLON: [3, (20, 235, 0)],
@@ -125,7 +107,6 @@ class BlankBot(sc2.BotAI):
 				pos = unit.position
 				cv2.circle(game_data, (int(pos[0]), int(pos[1])), draw_dict[unit_type][0], draw_dict[unit_type][1], -1)
 
-		# NOT THE MOST IDEAL, BUT WHATEVER LOL
 		main_base_names = ["nexus", "commandcenter", "hatchery"]
 		for enemy_building in self.known_enemy_structures:
 			pos = enemy_building.position
@@ -221,7 +202,6 @@ class BlankBot(sc2.BotAI):
 
 	async def expand(self):
 		try:
-			#######################################################
 			if self.units(NEXUS).amount < self.time/2 and self.can_afford(NEXUS):
 				await self.expand_now()
 		except Exception as e:
@@ -245,7 +225,6 @@ class BlankBot(sc2.BotAI):
 						await self.build(ROBOTICSFACILITY, near=pylon)
 
 			if self.units(CYBERNETICSCORE).ready.exists:
-				#################################################
 				if len(self.units(STARGATE)) < self.time:
 					if self.can_afford(STARGATE) and not self.already_pending(STARGATE):
 						await self.build(STARGATE, near=pylon)
@@ -268,8 +247,7 @@ class BlankBot(sc2.BotAI):
 		if len(self.units(VOIDRAY).idle) > 0:
 
 			target = False
-			#################################################
-			#################################################
+
 			if self.time > self.do_something_after:
 				if self.use_model:
 					prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
@@ -279,13 +257,9 @@ class BlankBot(sc2.BotAI):
 
 
 				if choice == 0:
-					# no attack
-					#################################################
-					#################################################
+					#no attack
 					wait = random.randrange(7,100)/100
 					self.do_something_after = self.time + wait
-					#################################################
-					#################################################
 
 				elif choice == 1:
 					#attack_unit_closest_nexus
@@ -311,6 +285,6 @@ class BlankBot(sc2.BotAI):
 
 
 run_game(maps.get("CatalystLE"), [
-	Bot(Race.Protoss, BlankBot(use_model=False)),
-	Computer(Race.Protoss, Difficulty.Medium),
+	Bot(Race.Protoss, BlankBot(use_model=True)),
+	Computer(Race.Protoss, Difficulty.Easy),
 	], realtime=False)
