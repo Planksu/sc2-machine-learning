@@ -250,6 +250,7 @@ class BlankBot(sc2.BotAI):
 
 			if self.time > self.do_something_after:
 				if self.use_model:
+					# TODO: find something more useful for the dimesions, as they are dependant on the map size that the model is made from
 					prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
 					choice = np.argmax(prediction[0])
 				else:
@@ -284,7 +285,7 @@ class BlankBot(sc2.BotAI):
 				self.train_data.append([y, self.flipped])
 
 
-run_game(maps.get("CatalystLE"), [
+run_game(maps.get("AbyssalReefLE"), [
 	Bot(Race.Protoss, BlankBot(use_model=True)),
 	Computer(Race.Protoss, Difficulty.Easy),
 	], realtime=False)

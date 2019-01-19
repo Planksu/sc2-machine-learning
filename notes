@@ -1,0 +1,2 @@
+- self.time is incorporated into the pysc2 package now, thus you dont have to set the time every frame, the framework does it for you. usage is still the same, just use self.time
+- the reshape-function inputs in the attack-method are dependant on the map that was used in the model, need to find a way to implement the map dimensions better?
