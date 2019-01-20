@@ -3,6 +3,7 @@ A bot using TensorFlow and CUDA to utilize machine learning in playing StarCraft
 
 
 Written for use in Python 3.4 and upwards, probably doesn't work for earlier versions. 
+Confirmed working on Python 3.5.5 and 3.6.7
 
 # TensorFlow
 This bot uses TensorFlow to utilize the machine learning capabilities it offers, to make the bot more human-like instead of being a pure state machine. The model it is using isn't the most optimized one, but it works fine for using it to play against the standard StarCraft 2 bots.
