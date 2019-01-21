@@ -1,3 +1,9 @@
 - self.time is incorporated into the pysc2 package now, thus you dont have to set the time every frame, the framework does it for you. usage is still the same, just use self.time
 - the reshape-function inputs in the attack-method are dependant on the map that was used in the model, need to find a way to implement the map dimensions better?
 - if running multiple instances, use a bash script to run a python script that runs several of bot scripts. this prevents the python instance from staying in scope for a long time, which causes the 300mb model to be loaded into memory several times during the lifetime of the scripts, and literally eats up your ram. multiple.sh runs multiple_instances.py, which then in turn runs blankbot.py, causing the blankbot.py instance to be out of scope after playing one game, and clears up the ram
+- not worth to distribute the scouts every frame again, consider a second gap or something like that to improve performance
+
+todo:
+
+distribute  workers less often
+put in weights from p17

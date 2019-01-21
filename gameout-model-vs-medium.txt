@@ -40,3 +40,15 @@ Model Result.Victory
 Model Result.Victory
 Model Result.Victory
 Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Model Result.Defeat
+Random Result.Defeat
+Random Result.Defeat
