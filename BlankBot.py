@@ -13,7 +13,7 @@ import keras
 from keras import backend as K
 
 
-os.environ["SC2PATH"] = 'E:/Blizzard Games/StarCraft II/'
+os.environ["SC2PATH"] = '/home/antsa/sc2stuff/SC2Install/StarCraftII'
 HEADLESS = True
 
 class BlankBot(sc2.BotAI):
@@ -27,43 +27,32 @@ class BlankBot(sc2.BotAI):
         self.scouts_and_spots = {}
 
         self.choices = {0: self.build_scout,
-                                        1: self.build_zealot,
-                                        2: self.build_gateway,
-                                        3: self.build_voidray,
-                                        4: self.build_stalker,
-                                        5: self.build_worker,
-                                        6: self.build_assimilator,
-                                        7: self.build_stargate,
-                                        8: self.build_pylon,
-                                        9: self.defend_nexus,
-                                        10: self.attack_known_enemy_unit,
-                                        11: self.attack_known_enemy_structure,
-                                        12: self.expand,
-                                        13: self.do_nothing,
-                                        }
+                        1: self.build_zealot,
+                        2: self.build_gateway,
+                        3: self.build_voidray,
+                        4: self.build_stalker,
+                        5: self.build_worker,
+                        6: self.build_assimilator,
+                        7: self.build_stargate,
+                        8: self.build_pylon,
+                        9: self.defend_nexus,
+                        10: self.attack_known_enemy_unit,
+                        11: self.attack_known_enemy_structure,
+                        12: self.expand,
+                        13: self.do_nothing,
+                        }
 
         self.train_data = []
+
         if self.use_model:
             print("USING MODEL!")
             self.model = keras.models.load_model("BasicCNN-30-epochs-0.0001-LR-4.2")
 
     def on_end(self, game_result):
         print('--- on_end called ---')
-        print(game_result, self.use_model)
 
-        with open("gameout-model-vs-medium.txt","a") as f:
-            if self.use_model:
-                f.write("Model {}\n".format(game_result))
-            else:
-                f.write("Random {}\n".format(game_result))
-        #clear keras session from memory
-        K.clear_session()
-
-    async def on_step(self, iteration):
-        await self.scout()
-        await self.intel()
-        await self.do_something()
-        await self.distribute_workers()
+        if game_result == Result.Victory:
+            np.save("train_data/{}.npy".format(str(int(time.time()))), np.array(self.train_data))
 
     async def build_scout(self):
         for rf in self.units(ROBOTICSFACILITY).ready.noqueue:
@@ -76,6 +65,15 @@ class BlankBot(sc2.BotAI):
             if self.units(CYBERNETICSCORE).ready.exists:
                 if self.can_afford(ROBOTICSFACILITY) and not self.already_pending(ROBOTICSFACILITY):
                     await self.build(ROBOTICSFACILITY, near=pylon)
+
+
+    async def on_step(self, iteration):
+        await self.scout()
+        await self.intel()
+        await self.do_something()
+        await self.distribute_workers()
+
+    
 
     async def build_zealot(self):
         gateways = self.units(GATEWAY).ready.noqueue
@@ -333,7 +331,8 @@ class BlankBot(sc2.BotAI):
             self.train_data.append([y, self.flipped])
 
 
-run_game(maps.get("AbyssalReefLE"), [
-        Bot(Race.Protoss, BlankBot(use_model=False)),
-        Computer(Race.Protoss, Difficulty.Easy),
-        ], realtime=False)
+if True:
+    run_game(maps.get("AbyssalReefLE"), [
+            Bot(Race.Protoss, BlankBot(use_model=False)),
+            Computer(Race.Protoss, Difficulty.Easy),
+            ], realtime=False)
