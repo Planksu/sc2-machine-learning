@@ -9,12 +9,12 @@ import os
 import time
 import numpy as np
 import math
-import keras
-from keras import backend as K
+#import keras
+#from keras import backend as K
 
 
-os.environ["SC2PATH"] = '/home/antsa/sc2stuff/SC2Install/StarCraftII'
-HEADLESS = True
+os.environ["SC2PATH"] = '/home/antsa/StarCraftII/'
+HEADLESS = False
 
 class BlankBot(sc2.BotAI):
     def __init__(self, use_model=False, title=1):
@@ -22,24 +22,23 @@ class BlankBot(sc2.BotAI):
         self.do_something_after = 0
         self.use_model = use_model
         self.title = title
+        self.attack_unit_min = 5
 
         # key is unit tag, object is location
         self.scouts_and_spots = {}
 
-        self.choices = {0: self.build_scout,
+        self.choices = {0: self.scout,
                         1: self.build_zealot,
                         2: self.build_gateway,
                         3: self.build_voidray,
                         4: self.build_stalker,
-                        5: self.build_worker,
-                        6: self.build_assimilator,
-                        7: self.build_stargate,
-                        8: self.build_pylon,
-                        9: self.defend_nexus,
-                        10: self.attack_known_enemy_unit,
-                        11: self.attack_known_enemy_structure,
-                        12: self.expand,
-                        13: self.do_nothing,
+                        #5: self.build_worker,
+                        #6: self.build_assimilator,
+                        5: self.build_stargate,
+                        #8: self.build_pylon,
+                        6: self.attack,
+                        #12: self.expand,
+                        #13: self.do_nothing,
                         }
 
         self.train_data = []
@@ -68,10 +67,14 @@ class BlankBot(sc2.BotAI):
 
 
     async def on_step(self, iteration):
-        await self.scout()
+        #await self.scout()
+        await self.expand()
         await self.intel()
-        await self.do_something()
         await self.distribute_workers()
+        await self.build_worker()
+        await self.build_pylon()
+        await self.build_assimilator()
+        await self.do_something()
 
     
 
@@ -107,9 +110,9 @@ class BlankBot(sc2.BotAI):
                     await self.build(CYBERNETICSCORE, near=pylon)
 
     async def build_worker(self):
-        nexuses = self.units(NEXUS).ready
+        nexuses = self.units(NEXUS).ready.noqueue
         if nexuses.exists:
-            if self.can_afford(PROBE):
+            if self.can_afford(PROBE) and (len(self.units(PROBE)) < len(nexuses)*21) and len(self.units(PROBE)) < self.MAX_WORKERS:
                 await self.do(random.choice(nexuses).train(PROBE))
 
     async def build_assimilator(self):
@@ -143,14 +146,15 @@ class BlankBot(sc2.BotAI):
             if self.can_afford(NEXUS):
                 await self.expand_now()
         except Exception as e:
-            print(str(e))
+            pass
+            #print(str(e))
 
     async def do_nothing(self):
         wait = random.randrange(7, 100)/100
         self.do_something_after = self.time + wait
 
-    async def defend_nexus(self):
-        if len(self.known_enemy_units) > 0:
+    async def attack(self):
+        if len(self.known_enemy_units) > 0 and (len(self.units) - len(self.units.PROBE)) > attack_unit_min:
             target = self.known_enemy_units.closest_to(random.choice(self.units(NEXUS)))
             for u in self.units(VOIDRAY).idle:
                 await self.do(u.attack(target))
@@ -158,26 +162,8 @@ class BlankBot(sc2.BotAI):
                 await self.do(u.attack(target))
             for u in self.units(ZEALOT).idle:
                 await self.do(u.attack(target))
-
-    async def attack_known_enemy_structure(self):
-        if len(self.known_enemy_structures) > 0:
-            target = random.choice(self.known_enemy_structures)
-            for u in self.units(VOIDRAY).idle:
-                await self.do(u.attack(target))
-            for u in self.units(STALKER).idle:
-                await self.do(u.attack(target))
-            for u in self.units(ZEALOT).idle:
-                await self.do(u.attack(target))
-
-    async def attack_known_enemy_unit(self):
-        if len(self.known_enemy_units) > 0:
-            target = self.known_enemy_units.closest_to(random.choice(self.units(NEXUS)))
-            for u in self.units(VOIDRAY).idle:
-                await self.do(u.attack(target))
-            for u in self.units(STALKER).idle:
-                await self.do(u.attack(target))
-            for u in self.units(ZEALOT).idle:
-                await self.do(u.attack(target))
+        else:
+            print("Not enough units to attack!")
 
     def random_location_variance(self, enemy_start_location):
         x = enemy_start_location[0]
@@ -296,7 +282,8 @@ class BlankBot(sc2.BotAI):
             cv2.line(game_data, (0, 7), (int(line_max*vespene_ratio), 7), (210, 200, 0), 3)  # gas / 1500
             cv2.line(game_data, (0, 3), (int(line_max*mineral_ratio), 3), (0, 255, 25), 3)  # minerals minerals/1500
         except Exception as e:
-            print(str(e))
+            pass
+            #print(str(e))
 
         # flip horizontally to make our final fix in visual representation:
         grayed = cv2.cvtColor(game_data, cv2.COLOR_BGR2GRAY)
@@ -321,18 +308,27 @@ class BlankBot(sc2.BotAI):
                 prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
                 choice = np.argmax(prediction[0])
             else:
-                choice = random.randrange(0, 14)
+                scout_weight = 1
+                zealot_weight = 1
+                gateway_weight = 1
+                voidray_weight = 1
+                stalker_weight = 1
+                stargate_weight = 1
+                attack_weight = 1
+
+                choice_weights = scout_weight*[0]+zealot_weight*[1]+gateway_weight*[2]+voidray_weight*[3]+stalker_weight*[4]+stargate_weight*[5]+attack_weight*[6]
+                choice = random.choice(choice_weights)
             try:
                 await self.choices[choice]()
             except Exception as e:
-                print(str(e))
-            y = np.zeros(14)
+                pass
+                #print(str(e))
+            y = np.zeros(7)
             y[choice] = 1
             self.train_data.append([y, self.flipped])
 
 
-if True:
-    run_game(maps.get("AbyssalReefLE"), [
-            Bot(Race.Protoss, BlankBot(use_model=False)),
-            Computer(Race.Protoss, Difficulty.Easy),
-            ], realtime=False)
+run_game(maps.get("AbyssalReefLE"), [
+        Bot(Race.Protoss, BlankBot(use_model=False)),
+        Computer(Race.Protoss, Difficulty.Easy),
+        ], realtime=False)
