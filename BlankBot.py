@@ -13,7 +13,7 @@ import math
 #from keras import backend as K
 
 
-os.environ["SC2PATH"] = '/home/antsa/StarCraftII/'
+os.environ["SC2PATH"] = 'E:/Blizzard Games/StarCraft II'
 HEADLESS = False
 
 class BlankBot(sc2.BotAI):
@@ -22,7 +22,8 @@ class BlankBot(sc2.BotAI):
         self.do_something_after = 0
         self.use_model = use_model
         self.title = title
-        self.attack_unit_min = 5
+        self.attack_unit_min = random.randrange(1,20)
+        print(self.attack_unit_min)
 
         # key is unit tag, object is location
         self.scouts_and_spots = {}
@@ -76,7 +77,7 @@ class BlankBot(sc2.BotAI):
         await self.build_assimilator()
         await self.do_something()
 
-    
+
 
     async def build_zealot(self):
         gateways = self.units(GATEWAY).ready.noqueue
@@ -137,7 +138,7 @@ class BlankBot(sc2.BotAI):
     async def build_pylon(self):
         nexuses = self.units(NEXUS).ready
         if nexuses.exists:
-            if self.can_afford(PYLON):
+            if self.can_afford(PYLON) and self.supply_left < 5:
                 # build towards the center of the map rather than into the mineral line
                 await self.build(PYLON, near=self.units(NEXUS).first.position.towards(self.game_info.map_center, 5))
 
@@ -153,17 +154,38 @@ class BlankBot(sc2.BotAI):
         wait = random.randrange(7, 100)/100
         self.do_something_after = self.time + wait
 
+    def check_if_known_enemies(self):
+        if len(self.known_enemy_units) > 0 or len(self.known_enemy_structures) > 0:
+            return True
+        else:
+            return False
+
+    def check_if_enough_army(self):
+        army_count = len(self.units(ZEALOT))+len(self.units(STALKER))+len(self.units(VOIDRAY))
+        if(army_count > self.attack_unit_min):
+            return True
+        else:
+            return False
+
+    def find_target(self):
+        if len(self.known_enemy_units) > 0:
+            return random.choice(self.known_enemy_units)
+        elif len(self.known_enemy_structures) > 0:
+            return random.choice(self.known_enemy_structures)
+        else:
+            return self.enemy_start_locations[0]
+
     async def attack(self):
-        if len(self.known_enemy_units) > 0 and (len(self.units) - len(self.units.PROBE)) > attack_unit_min:
-            target = self.known_enemy_units.closest_to(random.choice(self.units(NEXUS)))
+        if self.check_if_known_enemies() and self.check_if_enough_army():
+            print(self.check_if_enough_army())
+            print(self.check_if_known_enemies())
+            target = self.find_target()
             for u in self.units(VOIDRAY).idle:
                 await self.do(u.attack(target))
             for u in self.units(STALKER).idle:
                 await self.do(u.attack(target))
             for u in self.units(ZEALOT).idle:
                 await self.do(u.attack(target))
-        else:
-            print("Not enough units to attack!")
 
     def random_location_variance(self, enemy_start_location):
         x = enemy_start_location[0]
@@ -294,14 +316,6 @@ class BlankBot(sc2.BotAI):
             cv2.waitKey(1)
 
 
-    def find_target(self, state):
-        if len(self.known_enemy_units) > 0:
-            return random.choice(self.known_enemy_units)
-        elif len(self.known_enemy_structures) > 0:
-            return random.choice(self.known_enemy_structures)
-        else:
-            return self.enemy_start_locations[0]
-
     async def do_something(self):
         if self.time > self.do_something_after:
             if self.use_model:
@@ -309,10 +323,10 @@ class BlankBot(sc2.BotAI):
                 choice = np.argmax(prediction[0])
             else:
                 scout_weight = 1
-                zealot_weight = 1
+                zealot_weight = 2
                 gateway_weight = 1
-                voidray_weight = 1
-                stalker_weight = 1
+                voidray_weight = 4
+                stalker_weight = 4
                 stargate_weight = 1
                 attack_weight = 1
 
