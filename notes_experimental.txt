@@ -1,0 +1,4 @@
+- most likely lengthen tick duration, data amount huge atm so it would make more sens to perform slower iterations. also adds humanlike senses to bot
+- add choices, still not sure how to reward bot though
+- add multi output model, outputting weights for actions at that time?
+- if multi output model, strengthen output predictions by using an exponent for the weights
