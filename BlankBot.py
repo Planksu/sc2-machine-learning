@@ -16,6 +16,7 @@ import math
 os.environ["SC2PATH"] = 'E:/Blizzard Games/StarCraft II'
 HEADLESS = False
 
+
 class BlankBot(sc2.BotAI):
     def __init__(self, use_model=False, title=1):
         self.MAX_WORKERS = 50
@@ -342,7 +343,177 @@ class BlankBot(sc2.BotAI):
             self.train_data.append([y, self.flipped])
 
 
-run_game(maps.get("AbyssalReefLE"), [
+
+
+class ActorCritic:
+    def __init__(self, sess):
+        self.sess = sess
+        self.memory = []
+
+        self.learning_rate = 1e-5
+        self.epsilon = 1.0
+        self.epsilon_decay = .995
+        self.gamma = .95
+        self.tau = .125
+
+        self.actor_state_input, self.actor_model = \
+            self.create_actor_model()
+        _, self.target_actor_model = self.create_actor_model()
+
+        self.actor_critic_grad = tf.placeholder(tf.float32, 
+            [None, (176, 200, 1)]) 
+        
+        actor_model_weights = self.actor_model.trainable_weights
+        self.actor_grads = tf.gradients(self.actor_model.output, 
+            actor_model_weights, -self.actor_critic_grad)
+        grads = zip(self.actor_grads, actor_model_weights)
+        self.optimize =  tf.train.AdamOptimizer(
+            self.learning_rate).apply_gradients(grads)
+
+        self.critic_state_input, self.critic_action_input, \
+            self.critic_model = self.create_critic_model()
+        _, _, self.target_critic_model = self.create_critic_model()
+
+        self.critic_grads = tf.gradients(self.critic_model.output, 
+            self.critic_action_input)
+        
+        # Initialize for later gradient calculations
+        self.sess.run(tf.initialize_all_variables())
+
+
+    def actor_model(self):
+        model = Sequential()
+        input_state = Input(shape=(176, 200, 1))
+        model.add(Conv2D(32, (7, 7), padding='same',
+                         activation='relu'))(input_state)
+        model.add(Conv2D(32, (3, 3), activation='relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Dropout(0.2))
+
+        model.add(Conv2D(64, (3, 3), padding='same',
+                         activation='relu'))
+        model.add(Conv2D(64, (3, 3), activation='relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Dropout(0.2))
+
+        model.add(Conv2D(128, (3, 3), padding='same',
+                         activation='relu'))
+        model.add(Conv2D(128, (3, 3), activation='relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Dropout(0.2))
+
+        model.add(Flatten())
+        model.add(Dense(1024, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(7, activation='softmax'))
+
+        learning_rate = 0.0001
+        opt = keras.optimizers.adam(lr=learning_rate)#, decay=1e-5
+
+        model.compile(loss='categorical_crossentropy',
+                      optimizer=opt,
+                      metrics=['accuracy'])
+        return input_state, model
+
+    def critic_model(self):
+        input_state = Input(shape=(176,200,1))
+        state_h1 = Dense(24, activation='relu')(state_input)
+        state_h2 = Dense(48)(state_h1)
+        state_h3 = Dense(96)(state_h2)
+        state_h4 = Dense(192)(state_h3)
+        state_h5 = Dense(384)(state_h4)
+            
+        action_input = Input(shape=(176,200,1))
+        action_h1    = Dense(384)(action_input)
+            
+        merged    = Add()([state_h5, action_h1])
+        merged_h1 = Dense(24, activation='relu')(merged)
+        output = Dense(1, activation='relu')(merged_h1)
+        model  = Model(input=[state_input,action_input], 
+                output=output)
+            
+        adam  = Adam(lr=0.0001)
+        model.compile(loss="mse", optimizer=adam)
+        return state_input, action_input, model
+
+    def remember(self, cur_state, action, reward, new_state, done):
+        self.memory.append([cur_state, action, reward, new_state, done])
+
+    def _train_critic(self, samples):
+        for sample in samples:
+            cur_state, action, reward, new_state, done = sample
+            if not done:
+                target_action = np.argmax(self.target_actor_model.predict(([self.flipped.reshape([-1, 176, 200, 3])]))[0])
+                future_reward = np.argmax(self.target_critic_model.predict(([self.flipped.reshape([-1, 176, 200, 3])]))[0])
+                reward += self.gamma * future_reward
+            self.critic_model.fit([cur_state, action], reward, verbose=0)
+
+    def _train_actor(self, samples):
+        for sample in samples:
+            cur_state, action, reward, new_state, _ = sample
+            predicted_action = np.argmax(self.target_actor_model.predict(([self.flipped.reshape([-1, 176, 200, 3])]))[0])
+            grads = self.sess.run(self.critic_grads, feed_dict={
+                self.critic_state_input:  cur_state,
+                self.critic_action_input: predicted_action
+            })[0]
+
+            self.sess.run(self.optimize, feed_dict={
+                self.actor_state_input: cur_state,
+                self.actor_critic_grad: grads
+            })
+
+    def train(self):
+        batch_size = 32
+        rewards = []
+        samples = random.shuffle(bat)
+
+    def _update_actor_target(self):
+        actor_model_weights = self.actor_model.get_weights()
+        actor_target_weights = self.target_critic_model.get_weights()
+
+        for i in range(len(actor_target_weights)):
+            actor_target_weights[i] = actor_model_weights[i]
+        self.target_critic_model.set_weights(actor_target_weights)
+
+    def _update_critic_target(self):
+        critic_model_weights  = self.critic_model.get_weights()
+        critic_target_weights = self.critic_target_model.get_weights()
+        
+        for i in range(len(critic_target_weights)):
+            critic_target_weights[i] = critic_model_weights[i]
+        self.critic_target_model.set_weights(critic_target_weights)
+
+    def update_target(self):
+        self._update_actor_target()
+        self._update_critic_target()
+
+    def act(self, cur_state):
+        self.epsilon *= self.epsilon_decay
+        if np.random.random() < self.epsilon:
+            return self
+        return np.argmax(self.target_actor_model.predict(([self.flipped.reshape([-1, 176, 200, 3])]))[0])
+
+
+
+def main():
+    sess = tf.Session()
+    keras.set_session(sess)
+    actor_critic = ActorCritic(sess)
+
+    num_trials = 10000
+    trial_len = 500
+
+    action = 0
+
+    run_game(maps.get("AbyssalReefLE"), [
         Bot(Race.Protoss, BlankBot(use_model=False)),
         Computer(Race.Protoss, Difficulty.Easy),
         ], realtime=False)
+
+    while True:
+
+
+
+
+if __name__ == "__main__":
+    main()
