@@ -9,8 +9,13 @@ import os
 import time
 import numpy as np
 import math
-#import keras
-#from keras import backend as K
+import tensorflow as tf
+import keras
+from keras import backend as K
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten, Activation, Input
+from keras.layers import Conv2D, MaxPooling2D
+from keras.callbacks import TensorBoard
 
 
 os.environ["SC2PATH"] = 'E:/Blizzard Games/StarCraft II'
@@ -18,7 +23,7 @@ HEADLESS = False
 
 
 class BlankBot(sc2.BotAI):
-    def __init__(self, use_model=False, title=1):
+    def __init__(self, use_model=False, title=1, actorcritic=0):
         self.MAX_WORKERS = 50
         self.do_something_after = 0
         self.use_model = use_model
@@ -47,7 +52,8 @@ class BlankBot(sc2.BotAI):
 
         if self.use_model:
             print("USING MODEL!")
-            self.model = keras.models.load_model("BasicCNN-30-epochs-0.0001-LR-4.2")
+            #self.model = keras.models.load_model("BasicCNN-30-epochs-0.0001-LR-4.2")
+            self.actorcritic = actorcritic
 
     def on_end(self, game_result):
         print('--- on_end called ---')
@@ -320,7 +326,8 @@ class BlankBot(sc2.BotAI):
     async def do_something(self):
         if self.time > self.do_something_after:
             if self.use_model:
-                prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
+                prediction = self.actorcritic.act()
+                #prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
                 choice = np.argmax(prediction[0])
             else:
                 scout_weight = 1
@@ -356,9 +363,8 @@ class ActorCritic:
         self.gamma = .95
         self.tau = .125
 
-        self.actor_state_input, self.actor_model = \
-            self.create_actor_model()
-        _, self.target_actor_model = self.create_actor_model()
+        self.actor_state_input, self.actor_model = self.actor_model()
+        _, self.target_actor_model = self.actor_model()
 
         self.actor_critic_grad = tf.placeholder(tf.float32, 
             [None, (176, 200, 1)]) 
@@ -371,8 +377,8 @@ class ActorCritic:
             self.learning_rate).apply_gradients(grads)
 
         self.critic_state_input, self.critic_action_input, \
-            self.critic_model = self.create_critic_model()
-        _, _, self.target_critic_model = self.create_critic_model()
+            self.critic_model = self.critic_model()
+        _, _, self.target_critic_model = self.critic_model()
 
         self.critic_grads = tf.gradients(self.critic_model.output, 
             self.critic_action_input)
@@ -385,7 +391,8 @@ class ActorCritic:
         model = Sequential()
         input_state = Input(shape=(176, 200, 1))
         model.add(Conv2D(32, (7, 7), padding='same',
-                         activation='relu'))(input_state)
+        input_shape=(176,200,1),
+                         activation='relu'))
         model.add(Conv2D(32, (3, 3), activation='relu'))
         model.add(MaxPooling2D(pool_size=(2, 2)))
         model.add(Dropout(0.2))
@@ -462,11 +469,6 @@ class ActorCritic:
                 self.actor_critic_grad: grads
             })
 
-    def train(self):
-        batch_size = 32
-        rewards = []
-        samples = random.shuffle(bat)
-
     def _update_actor_target(self):
         actor_model_weights = self.actor_model.get_weights()
         actor_target_weights = self.target_critic_model.get_weights()
@@ -493,11 +495,9 @@ class ActorCritic:
             return self
         return np.argmax(self.target_actor_model.predict(([self.flipped.reshape([-1, 176, 200, 3])]))[0])
 
-
-
 def main():
     sess = tf.Session()
-    keras.set_session(sess)
+    K.set_session(sess)
     actor_critic = ActorCritic(sess)
 
     num_trials = 10000
@@ -506,14 +506,13 @@ def main():
     action = 0
 
     run_game(maps.get("AbyssalReefLE"), [
-        Bot(Race.Protoss, BlankBot(use_model=False)),
+        Bot(Race.Protoss, BlankBot(use_model=False, actorcritic=actor_critic)),
         Computer(Race.Protoss, Difficulty.Easy),
         ], realtime=False)
 
     while True:
-
-
-
+        actor_critic.update_target()
+        
 
 if __name__ == "__main__":
     main()
