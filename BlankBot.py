@@ -14,7 +14,7 @@ import math
 #from keras import backend as K
 
 
-os.environ["SC2PATH"] = 'E:/Blizzard Games/StarCraft II'
+os.environ["SC2PATH"] = 'D:/Blizzard Games/StarCraft II'
 HEADLESS = False
 
 class BlankBot(sc2.BotAI):
@@ -22,9 +22,7 @@ class BlankBot(sc2.BotAI):
         self.do_something_after = 0
         self.use_model = use_model
         self.title = title
-        self.iterations_per_sec = 3
-        self.current_iteration_period = 0
-        self.iterations_done = 0
+        self.current_second = 0
 
         # key is unit tag, object is location
         self.scouts_and_spots = {}
@@ -52,15 +50,13 @@ class BlankBot(sc2.BotAI):
             self.model = keras.models.load_model("BasicCNN-30-epochs-0.0001-LR-4.2")
 
     async def on_step(self, iteration):
-        self.current_iteration_period = self.time*self.iterations_per_sec
-        if(self.current_iteration_period > self.iterations_done) and (self.iterations_done <= self.iterations_per_sec):
+        if(self.time > self.current_second):
             await self.intel()
             await self.distribute_workers()
             await self.do_something()
-            self.iterations_done += 1
-        else:
-            self.current_iteration_period = 0
-            self.iterations_done = 0
+            print(self.time)
+            self.current_second = self.time
+            self.current_second = self.current_second + 1
 
     def on_end(self, game_result):
         print('--- on_end called ---')
@@ -359,6 +355,8 @@ class BlankBot(sc2.BotAI):
 
             choice_weights = scout*[0]+zealot*[1]+gateway*[2]+voidray*[3]+stalker*[4]+worker*[5]+assimilator*[6]+stargate*[7]+pylon*[8]+attack*[9]+expand*[10]+defend*[11]+harass*[12]+carrier*[13]
             choice = random.choice(choice_weights)
+
+            print(choice)
         try:
             await self.choices[choice]()
         except Exception as e:
@@ -371,5 +369,5 @@ class BlankBot(sc2.BotAI):
 
 run_game(maps.get("AbyssalReefLE"), [
         Bot(Race.Protoss, BlankBot(use_model=False)),
-        Computer(Race.Protoss, Difficulty.Easy),
+        Computer(Race.Protoss, Difficulty.Medium),
         ], realtime=False)
