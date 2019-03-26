@@ -1,8 +1,9 @@
 import sc2
 from sc2 import run_game, maps, Race, Difficulty, position, Result
-from sc2.player import Bot, Computer
+from sc2.data import PlayerType
+from sc2.player import Bot, Computer, Human, Player
 from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, GATEWAY, \
-        CYBERNETICSCORE, STALKER, STARGATE, VOIDRAY, ROBOTICSFACILITY, OBSERVER, ZEALOT, CARRIER, ORACLE, FLEETBEACON
+        CYBERNETICSCORE, STALKER, STARGATE, VOIDRAY, ROBOTICSFACILITY, OBSERVER, ZEALOT, IMMORTAL
 from sc2.unit import AbilityId
 import random
 import cv2
@@ -19,55 +20,80 @@ HEADLESS = False
 
 class BlankBot(sc2.BotAI):
     def __init__(self, use_model=False, title=1):
-        self.do_something_after = 0
         self.use_model = use_model
         self.title = title
+        self.attacking_units = []
+        self.actions = []
+        self.max_workers = 57 #19 * 3 = 3 bases workers
         self.current_second = 0
 
         # key is unit tag, object is location
         self.scouts_and_spots = {}
 
-        self.choices = {0: self.scout,
-                        1: self.build_zealot,
-                        2: self.build_gateway,
-                        3: self.build_voidray,
-                        4: self.build_stalker,
-                        5: self.build_worker,
-                        6: self.build_assimilator,
-                        7: self.build_stargate,
-                        8: self.build_pylon,
-                        9: self.attack,
-                        10: self.expand,
-                        11: self.defend,
-                        12: self.harass,
-                        13: self.build_carriers,
+        self.choices = {#0: self.scout,
+                        0: self.build_zealot,
+                        1: self.build_gateway,
+                        #2: self.build_voidray,
+                        2: self.build_stalker,
+                        3: self.build_immortal,
+                        #5: self.build_worker,
+                        4: self.build_assimilator,
+                        #5: self.build_stargate,
+                        #8: self.build_pylon,
+                        5: self.attack,
+                        6: self.expand,
+                        7: self.defend,
                         }
 
         self.train_data = []
 
         if self.use_model:
             print("USING MODEL!")
-            self.model = keras.models.load_model("BasicCNN-30-epochs-0.0001-LR-4.2")
+            self.model = keras.models.load_model("<model name>")
 
     async def on_step(self, iteration):
+        # This if is here to restrict the APM of the bot to 1 per second
         if(self.time > self.current_second):
+            # Intel method saves the map status to game_data
             await self.intel()
             await self.distribute_workers()
+            await self.scout()
+            await self.build_worker()
+            await self.build_pylon()
+            await self.update_attackers()
+            if self.supply_left == 0 and self.supply_cap == 200:
+                await self.attack()
             await self.do_something()
-            print(self.time)
+            #print(self.time)
             self.current_second = self.time
             self.current_second = self.current_second + 1
 
     def on_end(self, game_result):
         print('--- on_end called ---')
 
+        with open("gameout-random-vs-medium.txt","a") as f:
+            if self.use_model:
+                f.write("Model {}\n".format(game_result))
+            else:
+                f.write("Random {}\n".format(game_result))
+
         if game_result == Result.Victory:
             np.save("train_data/{}.npy".format(str(int(time.time()))), np.array(self.train_data))
 
+    async def on_unit_destroyed(self, unit_tag):
+        for u in self.attacking_units:
+            if unit_tag == u.tag:
+                self.attacking_units.remove(u)
+                break
+
+    async def update_attackers(self):
+        if len(self.attacking_units) > 0:
+            for u in self.attacking_units:
+                target = self.find_target(u)
+                await self.do(u.attack(target))
 
     async def build_scout(self):
         for rf in self.units(ROBOTICSFACILITY).ready.noqueue:
-            print(len(self.units(OBSERVER)), self.time/3)
             if self.can_afford(OBSERVER) and self.supply_left > 0:
                 await self.do(rf.train(OBSERVER))
                 break
@@ -86,7 +112,7 @@ class BlankBot(sc2.BotAI):
     async def build_gateway(self):
         pylon = self.units(PYLON).ready.random
         if self.can_afford(GATEWAY) and not self.already_pending(GATEWAY):
-            await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center,  5))
+            await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_voidray(self):
         stargates = self.units(STARGATE).ready
@@ -106,12 +132,12 @@ class BlankBot(sc2.BotAI):
         if not cybernetics_cores.exists:
             if self.units(GATEWAY).ready.exists:
                 if self.can_afford(CYBERNETICSCORE) and not self.already_pending(CYBERNETICSCORE):
-                    await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center,  5))
+                    await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_worker(self):
         nexuses = self.units(NEXUS).ready.noqueue
         if nexuses.exists:
-            if self.can_afford(PROBE):
+            if self.can_afford(PROBE) and len(self.units(PROBE)) < self.max_workers:
                 await self.do(random.choice(nexuses).train(PROBE))
 
     async def build_assimilator(self):
@@ -131,14 +157,26 @@ class BlankBot(sc2.BotAI):
             pylon = self.units(PYLON).ready.random
             if self.units(CYBERNETICSCORE).ready.exists:
                 if self.can_afford(STARGATE) and not self.already_pending(STARGATE):
-                    await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center,  5))
+                    await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center,5))
 
     async def build_pylon(self):
         nexuses = self.units(NEXUS).ready
         if nexuses.exists:
             if self.can_afford(PYLON) and self.supply_left < 5:
                 # build towards the center of the map rather than into the mineral line
-                await self.build(PYLON, near=self.units(NEXUS).first.position.towards(self.game_info.map_center, 5))
+                await self.build(PYLON, near=self.units(NEXUS).first.position.towards(self.game_info.map_center,5))
+
+    async def build_immortal(self):
+        robos = self.units(ROBOTICSFACILITY).ready.noqueue
+        if len(robos) > 0:
+            if self.can_afford(IMMORTAL):
+                await self.do(random.choice(robos).train(IMMORTAL))
+        else:
+            pylon = self.units(PYLON).ready.noqueue.random
+            if self.units(CYBERNETICSCORE).ready.exists:
+                if self.can_afford(ROBOTICSFACILITY) and not self.already_pending(ROBOTICSFACILITY):
+                    await self.build(ROBOTICSFACILITY, near=pylon.position.towards(self.game_info.map_center, 5))
+
 
     async def expand(self):
         try:
@@ -146,7 +184,6 @@ class BlankBot(sc2.BotAI):
                 await self.expand_now()
         except Exception as e:
             pass
-            #print(str(e))
 
     def check_if_known_enemies(self):
         if len(self.known_enemy_units) > 0 or len(self.known_enemy_structures) > 0:
@@ -154,23 +191,33 @@ class BlankBot(sc2.BotAI):
         else:
             return False
 
-    def find_target(self):
-        if len(self.known_enemy_units) > 0:
+    def find_target(self, this_unit):
+        enemies_in_range = self.known_enemy_units.filter(lambda u: this_unit.target_in_range(u))
+        if len(enemies_in_range) > 0:
+            target = enemies_in_range.closest_to(this_unit.position)
+            return target
+        elif len(self.known_enemy_units) > 0:
             return random.choice(self.known_enemy_units)
         elif len(self.known_enemy_structures) > 0:
             return random.choice(self.known_enemy_structures)
-        else:
-            return self.enemy_start_locations[0]
 
     async def attack(self):
-        target = self.find_target()
+        print("attack")
         for u in self.units(VOIDRAY).idle:
+            self.attacking_units.append(u)
+            target = self.find_target(u)
             await self.do(u.attack(target))
         for u in self.units(STALKER).idle:
+            self.attacking_units.append(u)
+            target = self.find_target(u)
             await self.do(u.attack(target))
         for u in self.units(ZEALOT).idle:
+            self.attacking_units.append(u)
+            target = self.find_target(u)
             await self.do(u.attack(target))
-        for u in self.units(CARRIER).idle:
+        for u in self.units(IMMORTAL).idle:
+            self.attacking_units.append(u)
+            target = self.find_target(u)
             await self.do(u.attack(target))
 
 
@@ -189,20 +236,14 @@ class BlankBot(sc2.BotAI):
                         await self.do(u.attack(target))
 
     async def harass(self):
-        if len(self.units(ORACLE)) > 0:
-            for o in self.units(ORACLE).idle:
-                if o.get_available_abilities():
-                    await self.do(o.move(self.enemy_start_locations[0]))
-                    await self.do(o.attack(self.known_enemy_units(PROBE)))
+        if len(self.units(VOIDRAY)) > 0:
+            for o in self.units(VOIDRAY).idle:
+                await self.do(o.move(self.enemy_start_locations[0]))
+                target = random.choice(self.known_enemy_units)
+                await self.do(o.attack(target))
 
         if len(self.units(STARGATE)) <= 0:
             await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center,  5))
-
-    async def build_carriers(self):
-        if len(self.units(STARGATE).ready) > 0 and len(self.units(FLEETBEACON).ready) > 0:
-            await self.do(random.choice(self.units(STARGATE).train(CARRIER)))
-        else:
-            await self.build(FLEETBEACON, near=pylon.position.towards(self.game_info.map_center,  5))
 
 
     def random_location_variance(self, enemy_start_location):
@@ -338,36 +379,30 @@ class BlankBot(sc2.BotAI):
             prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
             choice = np.argmax(prediction[0])
         else:
-            scout = 7
-            zealot = 7
-            gateway = 7
-            voidray = 7
-            stalker = 7
-            worker = 21
-            assimilator = 7
-            stargate = 7
-            pylon = 7
+            zealot = 10
+            gateway = 15
+            stalker = 20
+            immortal = 10
+            assimilator = 5
             attack = 1
-            expand = 14
-            defend = 14
-            harass = 7
-            carrier = 7
+            expand = 40
+            defend = 15
 
-            choice_weights = scout*[0]+zealot*[1]+gateway*[2]+voidray*[3]+stalker*[4]+worker*[5]+assimilator*[6]+stargate*[7]+pylon*[8]+attack*[9]+expand*[10]+defend*[11]+harass*[12]+carrier*[13]
+            choice_weights = zealot*[0]+gateway*[1]+stalker*[2]+immortal*[3]+assimilator*[4]+attack*[5]+expand*[6]+defend*[7]
             choice = random.choice(choice_weights)
 
-            print(choice)
+            #print(choice)
         try:
             await self.choices[choice]()
         except Exception as e:
             pass
                 #print(str(e))
-        y = np.zeros(14)
+        y = np.zeros(10)
         y[choice] = 1
         self.train_data.append([y, self.flipped])
 
 
 run_game(maps.get("AbyssalReefLE"), [
         Bot(Race.Protoss, BlankBot(use_model=False)),
-        Computer(Race.Protoss, Difficulty.Medium),
+        Computer(Race.Protoss, Difficulty.Easy),
         ], realtime=False)
