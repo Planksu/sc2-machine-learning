@@ -1,6 +1,9 @@
 import sc2
 from sc2 import run_game, maps, Race, Difficulty, position, Result
 from sc2.data import PlayerType
+from sc2.units import Units
+from sc2.unit import Unit
+from sc2.ids.unit_typeid import UnitTypeId
 from sc2.player import Bot, Computer, Human, Player
 from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, GATEWAY, \
         CYBERNETICSCORE, STALKER, STARGATE, VOIDRAY, ROBOTICSFACILITY, OBSERVER, ZEALOT, IMMORTAL
@@ -23,9 +26,9 @@ class BlankBot(sc2.BotAI):
         self.use_model = use_model
         self.title = title
         self.attacking_units = []
-        self.actions = []
         self.max_workers = 57 #19 * 3 = 3 bases workers
         self.current_second = 0
+        self.attacker_update_delay = 0
 
         # key is unit tag, object is location
         self.scouts_and_spots = {}
@@ -58,20 +61,31 @@ class BlankBot(sc2.BotAI):
             await self.intel()
             await self.distribute_workers()
             await self.scout()
-            await self.build_worker()
-            await self.build_pylon()
-            await self.update_attackers()
-            if self.supply_left == 0 and self.supply_cap == 200:
+
+            # Only do these if we have enough minerals, to save some cpu time
+            if self.minerals >= 100:
+                await self.build_worker()
+                await self.build_pylon()
+
+            # Attack if our supply is full
+            if self.supply_left <= 5 and self.supply_cap >= 195:
                 await self.attack()
+
+            # Finally, do something
             await self.do_something()
-            #print(self.time)
-            self.current_second = self.time
+
+            # Increment the current second
             self.current_second = self.current_second + 1
+        elif(self.time > self.attacker_update_delay):
+            # The APM for microing military units is 120
+            await self.update_attackers()
+            self.attacker_update_delay = self.attacker_update_delay + 0.5
+
 
     def on_end(self, game_result):
         print('--- on_end called ---')
 
-        with open("gameout-random-vs-medium.txt","a") as f:
+        with open("gameout-random-vs-easy.txt","a") as f:
             if self.use_model:
                 f.write("Model {}\n".format(game_result))
             else:
@@ -192,58 +206,80 @@ class BlankBot(sc2.BotAI):
             return False
 
     def find_target(self, this_unit):
-        enemies_in_range = self.known_enemy_units.filter(lambda u: this_unit.target_in_range(u))
-        if len(enemies_in_range) > 0:
-            target = enemies_in_range.closest_to(this_unit.position)
-            return target
-        elif len(self.known_enemy_units) > 0:
-            return random.choice(self.known_enemy_units)
-        elif len(self.known_enemy_structures) > 0:
-            return random.choice(self.known_enemy_structures)
+        if this_unit.weapon_cooldown <= self._client.game_step / 2:
+            if len(self.known_enemy_units) > 0:
+                enemies_in_range = self.known_enemy_units.filter(lambda u: this_unit.target_in_range(u))
+                if len(enemies_in_range) > 0:
+                    filtered_enemies_in_range = enemies_in_range.of_type(UnitTypeId.IMMORTAL)
+                    if len(filtered_enemies_in_range) > 0:
+                        target = min(filtered_enemies_in_range, key=lambda u: u.health)
+                    if not filtered_enemies_in_range:
+                        filtered_enemies_in_range = enemies_in_range.of_type(UnitTypeId.VOIDRAY)
+                        if len(filtered_enemies_in_range) > 0:
+                            target = min(filtered_enemies_in_range, key=lambda u: u.health)
+                        if not filtered_enemies_in_range:
+                            filtered_enemies_in_range = enemies_in_range.of_type(UnitTypeId.STALKER)
+                            if filtered_enemies_in_range:
+                                target = min(filtered_enemies_in_range, key=lambda u: u.health)
+                            if not filtered_enemies_in_range:
+                                target = min(enemies_in_range, key=lambda u: u.health)
+                    return target
+                elif len(self.known_enemy_units) > 0:
+                    return self.known_enemy_units.closest_to(this_unit)
+                elif len(self.known_enemy_structures) > 0:
+                    return self.known_enemy_structures.closest_to(this_unit)
+                else:
+                    return self.get_next_expansion()
 
     async def attack(self):
-        print("attack")
-        for u in self.units(VOIDRAY).idle:
-            self.attacking_units.append(u)
-            target = self.find_target(u)
-            await self.do(u.attack(target))
-        for u in self.units(STALKER).idle:
-            self.attacking_units.append(u)
-            target = self.find_target(u)
-            await self.do(u.attack(target))
-        for u in self.units(ZEALOT).idle:
-            self.attacking_units.append(u)
-            target = self.find_target(u)
-            await self.do(u.attack(target))
-        for u in self.units(IMMORTAL).idle:
-            self.attacking_units.append(u)
-            target = self.find_target(u)
-            await self.do(u.attack(target))
+        print("this is the start of the attack method")
+        voidrays = self.units.filter(lambda unit: unit.type_id==VOIDRAY)
+        stalkers = self.units.filter(lambda unit: unit.type_id==STALKER)
+        zealots = self.units.filter(lambda unit: unit.type_id==ZEALOTS)
+        immortals = self.units.filter(lambda unit: unit.type_id==IMMORTAL)
+
+        print("length" + len(zealots))
+        print(len(stalkers))
+        print(len(voidrays))
+        print(len(immortals))
+
+
+        for v in voidrays:
+            if v not in self.attacking_units:
+                self.attacking_units.append(v)
+                await self.do(v.attack(self.find_target(v)))
+        for s in stalkers:
+            if s not in self.attacking_units:
+                self.attacking_units.append(s)
+                await self.do(s.attack(self.find_target(s)))
+        for z in zealots:
+            if z not in self.attacking_units:
+                self.attacking_units.append(z)
+                await self.do(z.attack(self.find_target(z)))
+        for i in immortals:
+            if i not in self.attacking_units:
+                self.attacking_units.append(i)
+                await self.do(i.attack(self.find_target(i)))
 
 
     async def defend(self):
         if self.check_if_known_enemies():
+            voidrays = self.units.filter(lambda unit: unit.type_id==VOIDRAY and unit.noqueue)
+            stalker = self.units.filter(lambda unit: unit.type_id==STALKER and unit.noqueue)
+            zealot = self.units.filter(lambda unit: unit.type_id==ZEALOT and unit.noqueue)
+            immortals = self.units.filter(lambda unit: unit.type_id==IMMORTAL and unit.noqueue)
+
             for u in self.known_enemy_units:
                 if(u.distance_to(self.enemy_start_locations[0]) > u.distance_to(self.start_location)):
                     target = u.position
-                    for u in self.units(VOIDRAY).idle:
-                        await self.do(u.attack(target))
-                    for u in self.units(STALKER).idle:
-                        await self.do(u.attack(target))
-                    for u in self.units(ZEALOT).idle:
-                        await self.do(u.attack(target))
-                    for u in self.units(CARRIER).idle:
-                        await self.do(u.attack(target))
-
-    async def harass(self):
-        if len(self.units(VOIDRAY)) > 0:
-            for o in self.units(VOIDRAY).idle:
-                await self.do(o.move(self.enemy_start_locations[0]))
-                target = random.choice(self.known_enemy_units)
-                await self.do(o.attack(target))
-
-        if len(self.units(STARGATE)) <= 0:
-            await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center,  5))
+                    for v in voidrays:
+                        await self.do(v.attack(target))
+                    for s in stalkers:
+                        await self.do(s.attack(target))
+                    for z in zealots:
+                        await self.do(z.attack(target))
+                    for i in immortals:
+                        await self.do(i.attack(target))
 
 
     def random_location_variance(self, enemy_start_location):
@@ -397,12 +433,12 @@ class BlankBot(sc2.BotAI):
         except Exception as e:
             pass
                 #print(str(e))
-        y = np.zeros(10)
+        y = np.zeros(8)
         y[choice] = 1
         self.train_data.append([y, self.flipped])
 
 
 run_game(maps.get("AbyssalReefLE"), [
         Bot(Race.Protoss, BlankBot(use_model=False)),
-        Computer(Race.Protoss, Difficulty.Easy),
+        Computer(Race.Protoss, Difficulty.Medium),
         ], realtime=False)
