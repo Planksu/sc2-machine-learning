@@ -18,7 +18,7 @@ import math
 #from keras import backend as K
 
 
-os.environ["SC2PATH"] = 'D:/Blizzard Games/StarCraft II'
+os.environ["SC2PATH"] = '/home/antton/Downloads/StarCraftII'
 HEADLESS = False
 
 class BlankBot(sc2.BotAI):
@@ -81,11 +81,10 @@ class BlankBot(sc2.BotAI):
             await self.update_attackers()
             self.attacker_update_delay = self.attacker_update_delay + 0.5
 
-
     def on_end(self, game_result):
         print('--- on_end called ---')
 
-        with open("gameout-random-vs-easy.txt","a") as f:
+        with open("gameout-random-vs-medium.txt","a") as f:
             if self.use_model:
                 f.write("Model {}\n".format(game_result))
             else:
@@ -197,6 +196,7 @@ class BlankBot(sc2.BotAI):
             if self.can_afford(NEXUS):
                 await self.expand_now()
         except Exception as e:
+            print("was unable to expand")
             pass
 
     def check_if_known_enemies(self):
@@ -234,9 +234,13 @@ class BlankBot(sc2.BotAI):
     async def attack(self):
         print("this is the start of the attack method")
         voidrays = self.units.filter(lambda unit: unit.type_id==VOIDRAY)
+        print("this is the second phase of the attack method")
         stalkers = self.units.filter(lambda unit: unit.type_id==STALKER)
-        zealots = self.units.filter(lambda unit: unit.type_id==ZEALOTS)
+        print("this is the third phase of the attack method")
+        zealots = self.units.filter(lambda unit: unit.type_id==ZEALOT)
+        print("this is the fourth phase of the attack method")
         immortals = self.units.filter(lambda unit: unit.type_id==IMMORTAL)
+        print("this is the fifth phase of the attack method")
 
         print("length" + len(zealots))
         print(len(stalkers))
@@ -415,14 +419,17 @@ class BlankBot(sc2.BotAI):
             prediction = self.model.predict([self.flipped.reshape([-1, 176, 200, 3])])
             choice = np.argmax(prediction[0])
         else:
-            zealot = 10
-            gateway = 15
-            stalker = 20
+            # Weights
+            zealot = 5
+            gateway = 12
+            stalker = 15
             immortal = 10
             assimilator = 5
-            attack = 1
+            attack = 3
             expand = 40
             defend = 15
+
+            #print("Expand multiplier this frame: ", expand)
 
             choice_weights = zealot*[0]+gateway*[1]+stalker*[2]+immortal*[3]+assimilator*[4]+attack*[5]+expand*[6]+defend*[7]
             choice = random.choice(choice_weights)
