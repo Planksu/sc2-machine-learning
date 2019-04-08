@@ -18,7 +18,7 @@ import math
 #from keras import backend as K
 
 
-os.environ["SC2PATH"] = '/home/antton/Downloads/StarCraftII'
+os.environ["SC2PATH"] = 'E:/Blizzard Games/StarCraft II/'
 HEADLESS = False
 
 class BlankBot(sc2.BotAI):
@@ -103,7 +103,8 @@ class BlankBot(sc2.BotAI):
         if len(self.attacking_units) > 0:
             for u in self.attacking_units:
                 target = self.find_target(u)
-                await self.do(u.attack(target))
+                if target is not None:
+                    await self.do(u.attack(target))
 
     async def build_scout(self):
         for rf in self.units(ROBOTICSFACILITY).ready.noqueue:
@@ -206,48 +207,47 @@ class BlankBot(sc2.BotAI):
             return False
 
     def find_target(self, this_unit):
+        # Can this unit attack right now?
         if this_unit.weapon_cooldown <= self._client.game_step / 2:
+            # Are there any enemy units to target?
             if len(self.known_enemy_units) > 0:
                 enemies_in_range = self.known_enemy_units.filter(lambda u: this_unit.target_in_range(u))
+                # Are there any enemies in range?
                 if len(enemies_in_range) > 0:
                     filtered_enemies_in_range = enemies_in_range.of_type(UnitTypeId.IMMORTAL)
+                    # Are there any immortals in range?
                     if len(filtered_enemies_in_range) > 0:
+                        # If yes, target the one with low health
                         target = min(filtered_enemies_in_range, key=lambda u: u.health)
                     if not filtered_enemies_in_range:
                         filtered_enemies_in_range = enemies_in_range.of_type(UnitTypeId.VOIDRAY)
+                        # Are there any voidrays in range?
                         if len(filtered_enemies_in_range) > 0:
                             target = min(filtered_enemies_in_range, key=lambda u: u.health)
                         if not filtered_enemies_in_range:
                             filtered_enemies_in_range = enemies_in_range.of_type(UnitTypeId.STALKER)
+                            # Are there any stalkers in range?
                             if filtered_enemies_in_range:
                                 target = min(filtered_enemies_in_range, key=lambda u: u.health)
                             if not filtered_enemies_in_range:
-                                target = min(enemies_in_range, key=lambda u: u.health)
-                    return target
-                elif len(self.known_enemy_units) > 0:
-                    return self.known_enemy_units.closest_to(this_unit)
+                                return self.known_enemy_units.closest_to(this_unit)
+                        return target
                 elif len(self.known_enemy_structures) > 0:
                     return self.known_enemy_structures.closest_to(this_unit)
-                else:
-                    return self.get_next_expansion()
+        else:
+            return None
 
     async def attack(self):
         print("this is the start of the attack method")
         voidrays = self.units.filter(lambda unit: unit.type_id==VOIDRAY)
         print("this is the second phase of the attack method")
         stalkers = self.units.filter(lambda unit: unit.type_id==STALKER)
+        print(len(stalkers))
         print("this is the third phase of the attack method")
         zealots = self.units.filter(lambda unit: unit.type_id==ZEALOT)
         print("this is the fourth phase of the attack method")
         immortals = self.units.filter(lambda unit: unit.type_id==IMMORTAL)
         print("this is the fifth phase of the attack method")
-
-        print("length" + len(zealots))
-        print(len(stalkers))
-        print(len(voidrays))
-        print(len(immortals))
-
-
         for v in voidrays:
             if v not in self.attacking_units:
                 self.attacking_units.append(v)
@@ -425,7 +425,7 @@ class BlankBot(sc2.BotAI):
             stalker = 15
             immortal = 10
             assimilator = 5
-            attack = 3
+            attack = 1
             expand = 40
             defend = 15
 
@@ -448,4 +448,4 @@ class BlankBot(sc2.BotAI):
 run_game(maps.get("AbyssalReefLE"), [
         Bot(Race.Protoss, BlankBot(use_model=False)),
         Computer(Race.Protoss, Difficulty.Medium),
-        ], realtime=False)
+        ], realtime=True)
