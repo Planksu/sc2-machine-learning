@@ -28,7 +28,6 @@ class BlankBot(sc2.BotAI):
         self.attacking_units = []
         self.max_workers = 57 #19 * 3 = 3 bases workers
         self.current_second = 0
-        self.attacker_update_delay = 0
         self.MAX_NEXUSES = 3
 
         # key is unit tag, object is location
@@ -55,9 +54,10 @@ class BlankBot(sc2.BotAI):
             print("USING MODEL!")
             self.model = keras.models.load_model("<model name>")
 
+
     async def on_step(self, iteration):
         # This if is here to restrict the APM of the bot to 1 per second
-        if(self.time > self.current_second):
+        if self.time > self.current_second:
             # Intel method saves the map status to game_data
             await self.intel()
             await self.distribute_workers()
@@ -74,13 +74,9 @@ class BlankBot(sc2.BotAI):
 
             # Finally, do something
             await self.do_something()
-
+            await self.update_attackers()
             # Increment the current second
             self.current_second = self.current_second + 1
-        elif(self.time > self.attacker_update_delay):
-            # The APM for microing military units is 120
-            await self.update_attackers()
-            self.attacker_update_delay = self.attacker_update_delay + 0.5
 
     def on_end(self, game_result):
         print('--- on_end called ---')
@@ -103,7 +99,7 @@ class BlankBot(sc2.BotAI):
 
     async def update_attackers(self):
         #print("Amount of attackers: ", len(self.attacking_units))
-        if len(self.attacking_units) > 0:
+        if self.attacking_units:
             for u in self.attacking_units:
                 target = self.find_target(u)
                 if target is not None and u is not None:
@@ -213,10 +209,10 @@ class BlankBot(sc2.BotAI):
         # Can this unit attack right now?
         if this_unit.can_attack:
             # Are there any enemy units to target?
-            if len(self.known_enemy_units) > 0:
+            if self.known_enemy_units:
                 enemies_in_range = self.known_enemy_units.in_attack_range_of(this_unit, -15)
                 # Are there any enemies in range?
-                if len(enemies_in_range) > 0:
+                if enemies_in_range:
                     # If yes, check if there are any priority targets
                     priority_targets = enemies_in_range.of_type(UnitTypeId.IMMORTAL)
                     if priority_targets:
@@ -231,7 +227,7 @@ class BlankBot(sc2.BotAI):
                             return target
                 else:
                     return self.known_enemy_units.closest_to(this_unit)
-            elif len(self.known_enemy_structures) > 0:
+            elif self.known_enemy_structures:
                 return self.known_enemy_structures.closest_to(this_unit)
         else:
             return None
@@ -440,5 +436,5 @@ class BlankBot(sc2.BotAI):
 
 run_game(maps.get("AbyssalReefLE"), [
         Bot(Race.Protoss, BlankBot(use_model=False)),
-        Computer(Race.Protoss, Difficulty.Easy),
+        Computer(Race.Protoss, Difficulty.Medium),
         ], realtime=False)
