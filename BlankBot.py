@@ -98,12 +98,28 @@ class BlankBot(sc2.BotAI):
                 break
 
     async def update_attackers(self):
-        #print("Amount of attackers: ", len(self.attacking_units))
-        if self.attacking_units:
-            for u in self.attacking_units:
-                target = self.find_target(u)
-                if target is not None and u is not None:
-                        await self.do(u.attack(target))
+        attacking_units_temp = self.attacking_units
+
+        # This is a much more efficient way of attaking, as a target is only searched again if the units are farther than 5 units away
+        while attacking_units_temp:
+            random_unit = random.choice(attacking_units_temp)
+            attacking_units_temp.remove(random_unit)
+            units_within_random_unit = []
+            for i in attacking_units_temp:
+                if random_unit.position.distance_to_point2(i.position) < 5:
+                    units_within_random_unit.append(i)
+                    attacking_units_temp.remove(i)
+
+            target = self.find_target(random_unit)
+            if target is not None:
+                await self.do(random_unit.attack(target))
+                for i in units_within_random_unit:
+                    await self.do(i.attack(target))
+
+            #for u in attacking_units_temp:
+                #target = self.find_target(u)
+                #if target is not None and u is not None:
+                    #await self.do(u.attack(target))
 
     async def build_scout(self):
         for rf in self.units(ROBOTICSFACILITY).ready.noqueue:
